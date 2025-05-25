@@ -1,16 +1,14 @@
 import type { NextConfig } from "next";
 
-export default (phase: string) => {
-  if (phase?.endsWith("-build")) {
-    process.env.MCP_NO_INITIAL = "true";
-  }
+export default () => {
   const nextConfig: NextConfig = {
-    serverExternalPackages: ["@libsql/client"],
     cleanDistDir: true,
     devIndicators: {
       position: "bottom-right",
     },
-    /* config options here */
+    env: {
+      NO_HTTPS: process.env.NO_HTTPS,
+    },
   };
   return nextConfig;
 };

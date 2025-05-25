@@ -5,8 +5,9 @@ import { ProjectDropdown } from "@/components/project-dropdown";
 import { ProjectSystemMessagePopup } from "@/components/project-system-message-popup";
 import PromptInput from "@/components/prompt-input";
 import { ThreadDropdown } from "@/components/thread-dropdown";
+import { useLatest } from "@/hooks/use-latest";
 import { useChat } from "@ai-sdk/react";
-import { Project } from "app-types/chat";
+import { ChatApiSchemaRequestBody, Project } from "app-types/chat";
 import { generateUUID } from "lib/utils";
 
 import {
@@ -74,14 +75,44 @@ export default function ProjectPage() {
 
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
 
-  const [appStoreMutate, model, toolChoice] = appStore(
-    useShallow((state) => [state.mutate, state.model, state.toolChoice]),
+  const [
+    appStoreMutate,
+    model,
+    toolChoice,
+    allowedMcpServers,
+    allowedAppDefaultToolkit,
+  ] = appStore(
+    useShallow((state) => [
+      state.mutate,
+      state.model,
+      state.toolChoice,
+      state.allowedMcpServers,
+      state.allowedAppDefaultToolkit,
+    ]),
   );
+
+  const latestRef = useLatest({
+    model,
+    toolChoice,
+    allowedMcpServers,
+    allowedAppDefaultToolkit,
+  });
 
   const { input, setInput, append, stop, status } = useChat({
     id: threadId,
     api: "/api/chat",
-    body: { id: threadId, model, toolChoice, projectId: id as string },
+    experimental_prepareRequestBody: ({ messages }) => {
+      const request: ChatApiSchemaRequestBody = {
+        id: threadId,
+        model: latestRef.current.model,
+        toolChoice: latestRef.current.toolChoice,
+        allowedAppDefaultToolkit: latestRef.current.allowedAppDefaultToolkit,
+        allowedMcpServers: latestRef.current.allowedMcpServers,
+        projectId: id as string,
+        message: messages.at(-1)!,
+      };
+      return request;
+    },
     initialMessages: [],
     sendExtraMessageFields: true,
     generateId: generateUUID,
@@ -140,10 +171,8 @@ export default function ProjectPage() {
         )}
 
         <PromptInput
-          ownerId={id as string}
           input={input}
           append={append}
-          ownerType="project"
           setInput={setInput}
           isLoading={isLoading}
           onStop={stop}

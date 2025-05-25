@@ -1,6 +1,5 @@
 "use client";
 
-import logger from "logger";
 import { toast } from "sonner";
 import JsonView from "ui/json-view";
 
@@ -16,7 +15,6 @@ export const notImplementedToast = () => {
 };
 
 export const handleErrorWithToast = (error: Error, id?: string) => {
-  logger.error(error);
   toast.error(`${error.name}`, {
     description: (
       <div className="my-4 max-h-[340px] overflow-y-auto">

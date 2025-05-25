@@ -16,13 +16,41 @@ import { Button } from "ui/button";
 import { Clipboard, CheckIcon } from "lucide-react";
 import JsonView from "ui/json-view";
 import { useCopy } from "@/hooks/use-copy";
+import dynamic from "next/dynamic";
+
+// Dynamically import MermaidDiagram component
+const MermaidDiagram = dynamic(
+  () => import("./mermaid-diagram").then((mod) => mod.MermaidDiagram),
+  {
+    loading: () => (
+      <div className="text-sm flex bg-accent/30 flex-col rounded-2xl relative my-4 overflow-hidden border">
+        <div className="w-full flex z-20 py-2 px-4 items-center">
+          <span className="text-sm text-muted-foreground">mermaid</span>
+        </div>
+        <div className="relative overflow-x-auto px-6 pb-6">
+          <div className="h-20 w-full flex items-center justify-center">
+            <span className="text-muted-foreground">
+              Loading Mermaid renderer...
+            </span>
+          </div>
+        </div>
+      </div>
+    ),
+    ssr: false,
+  },
+);
 
 const PurePre = ({
   children,
   className,
   code,
   lang,
-}: { children: any; className?: string; code: string; lang: string }) => {
+}: {
+  children: any;
+  className?: string;
+  code: string;
+  lang: string;
+}) => {
   const { copied, copy } = useCopy();
 
   return (
@@ -47,15 +75,25 @@ const PurePre = ({
 
 export async function highlight(
   code: string,
-  lang: BundledLanguage,
+  lang: BundledLanguage | (string & {}),
   theme: string,
 ) {
-  const parsed: BundledLanguage = bundledLanguages[lang] ? lang : "md";
+  const parsed: BundledLanguage = (
+    bundledLanguages[lang] ? lang : "md"
+  ) as BundledLanguage;
 
   if (lang === "json") {
     return (
       <PurePre code={code} lang={lang}>
         <JsonView data={code} initialExpandDepth={3} />
+      </PurePre>
+    );
+  }
+
+  if (lang === "mermaid") {
+    return (
+      <PurePre code={code} lang={lang}>
+        <MermaidDiagram chart={code} />
       </PurePre>
     );
   }
@@ -80,24 +118,26 @@ export function PreBlock({ children }: { children: any }) {
   const { theme } = useTheme();
   const language = children.props.className?.split("-")?.[1] || "bash";
   const [loading, setLoading] = useState(true);
-
   const [component, setComponent] = useState<JSX.Element | null>(
     <PurePre className="animate-pulse" code={code} lang={language}>
       {children}
     </PurePre>,
   );
+
   useLayoutEffect(() => {
     safe()
       .map(() =>
         highlight(
           code,
           language,
-          theme == "dark" ? "dark-plus" : "github-light",
+          theme === "dark" ? "dark-plus" : "github-light",
         ),
       )
       .ifOk(setComponent)
-      .watch(setLoading.bind(null, false));
+      .watch(() => setLoading(false));
   }, [theme, language, code]);
+
+  // For other code blocks, render as before
   return (
     <div
       className={cn(

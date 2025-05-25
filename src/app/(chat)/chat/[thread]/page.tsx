@@ -1,20 +1,9 @@
 import { selectThreadWithMessagesAction } from "@/app/api/chat/actions";
 import ChatBot from "@/components/chat-bot";
-import { UIMessage } from "ai";
-import { ChatMessage, ChatThread } from "app-types/chat";
-import { redirect } from "next/navigation";
 
-function convertToUIMessage(message: ChatMessage): UIMessage {
-  const um: UIMessage = {
-    id: message.id,
-    parts: message.parts as UIMessage["parts"],
-    role: message.role as UIMessage["role"],
-    content: "",
-    annotations: message.annotations as UIMessage["annotations"],
-    createdAt: new Date(message.createdAt),
-  };
-  return um;
-}
+import { ChatMessage, ChatThread } from "app-types/chat";
+import { convertToUIMessage } from "lib/utils";
+import { redirect } from "next/navigation";
 
 const fetchThread = async (
   threadId: string,
@@ -39,7 +28,6 @@ export default async function Page({
     <ChatBot
       threadId={threadId}
       key={threadId}
-      projectId={thread.projectId ?? undefined}
       initialMessages={initialMessages}
     />
   );

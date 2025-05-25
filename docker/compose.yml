@@ -1,0 +1,37 @@
+services:
+  mcp-client-chatbot:
+    build:
+      context: ..
+      dockerfile: ./docker/Dockerfile
+    ports:
+      - '3000:3000'
+    environment:
+      - NO_HTTPS=1
+    env_file:
+      - ../.env # root .env
+      - .env # docker .env
+    dns:
+      - 8.8.8.8 # Google's public DNS server
+      - 8.8.4.4 # Google's public DNS server
+    networks:
+      - mcp_client_network
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17
+    env_file:
+      - .env # docker .env
+    networks:
+      - mcp_client_network
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  mcp_client_network:
+    driver: bridge

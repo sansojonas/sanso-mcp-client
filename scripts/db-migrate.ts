@@ -1,24 +1,16 @@
-import { config } from "dotenv";
-import logger from "logger";
 import { colorize } from "consola/utils";
+import "load-env";
 
-config();
-
-let promise: Promise<any>;
-if (process.env.USE_FILE_SYSTEM_DB) {
-  promise = import("lib/db/sqlite/migrate.sqlite");
-} else {
-  promise = import("lib/db/pg/migrate.pg");
-}
+const promise = import("lib/db/pg/migrate.pg");
 
 await promise
   .then(() => {
-    logger.info("🚀 DB Migration completed");
+    console.info("🚀 DB Migration completed");
   })
   .catch((err) => {
-    logger.error(err);
+    console.error(err);
 
-    logger.warn(
+    console.warn(
       `
       ${colorize("red", "🚨 Migration failed due to incompatible schema.")}
       

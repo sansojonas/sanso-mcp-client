@@ -1,7 +1,6 @@
 "use server";
-
 import type { MCPServerConfig } from "app-types/mcp";
-import { mcpClientsManager } from "./mcp-manager";
+import { mcpClientsManager } from "lib/ai/mcp/mcp-manager";
 import { isMaybeMCPServerConfig } from "lib/ai/mcp/is-mcp-config";
 import { detectConfigChanges } from "lib/ai/mcp/mcp-config-diff";
 import { z } from "zod";

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createMCPToolId, extractMCPToolId, sanitizeFunctionName } from "./mcp-tool-id";
+import {
+  createMCPToolId,
+  extractMCPToolId,
+  sanitizeFunctionName,
+} from "./mcp-tool-id";
 
 describe("sanitizeFunctionName", () => {
   it("should sanitize names with invalid characters", () => {
@@ -15,16 +19,18 @@ describe("sanitizeFunctionName", () => {
     expect(sanitizeFunctionName("a_valid")).toBe("a_valid");
   });
 
-  it("should truncate names to 64 characters", () => {
-    const longName = "a".repeat(100);
-    expect(sanitizeFunctionName(longName).length).toBe(64);
-    expect(sanitizeFunctionName(longName)).toBe("a".repeat(64));
+  it("should truncate names to 124 characters", () => {
+    const longName = "a".repeat(150);
+    expect(sanitizeFunctionName(longName).length).toBe(124);
+    expect(sanitizeFunctionName(longName)).toBe("a".repeat(124));
   });
 
   it("should allow dots and dashes", () => {
     expect(sanitizeFunctionName("valid.name")).toBe("valid.name");
     expect(sanitizeFunctionName("valid-name")).toBe("valid-name");
-    expect(sanitizeFunctionName("valid.name-with_underscore")).toBe("valid.name-with_underscore");
+    expect(sanitizeFunctionName("valid.name-with_underscore")).toBe(
+      "valid.name-with_underscore",
+    );
   });
 });
 
@@ -39,12 +45,12 @@ describe("createMCPToolId", () => {
     expect(toolId).toBe("server_name_tool_function");
   });
 
-  it("should ensure the combined name doesn't exceed 64 characters", () => {
+  it("should ensure the combined name doesn't exceed 124 characters", () => {
     const longServerName = "s".repeat(40);
     const longToolName = "t".repeat(40);
     const toolId = createMCPToolId(longServerName, longToolName);
-    
-    expect(toolId.length).toBeLessThanOrEqual(64);
+
+    expect(toolId.length).toBeLessThanOrEqual(124);
     expect(toolId).toContain("_"); // Should still contain the separator
   });
 
@@ -62,7 +68,9 @@ describe("extractMCPToolId", () => {
   });
 
   it("should handle tool names with underscores", () => {
-    const { serverName, toolName } = extractMCPToolId("server_tool_with_underscores");
+    const { serverName, toolName } = extractMCPToolId(
+      "server_tool_with_underscores",
+    );
     expect(serverName).toBe("server");
     expect(toolName).toBe("tool_with_underscores");
   });

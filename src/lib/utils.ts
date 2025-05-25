@@ -1,3 +1,5 @@
+import type { UIMessage } from "ai";
+import type { ChatMessage } from "app-types/chat";
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -231,4 +233,21 @@ export function objectFlow<T extends Record<string, any>>(obj: T) {
 export function capitalizeFirstLetter(str: string): string {
   if (!str || str.length === 0) return str;
   return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+}
+
+export function truncateString(str: string, maxLength: number): string {
+  if (str.length <= maxLength) return str;
+  return str.slice(0, maxLength) + "...";
+}
+
+export function convertToUIMessage(message: ChatMessage): UIMessage {
+  const um: UIMessage = {
+    id: message.id,
+    parts: message.parts as UIMessage["parts"],
+    role: message.role as UIMessage["role"],
+    content: "",
+    annotations: message.annotations as UIMessage["annotations"],
+    createdAt: new Date(message.createdAt),
+  };
+  return um;
 }

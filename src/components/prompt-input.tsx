@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown, CornerRightUp, Paperclip, Pause } from "lucide-react";
-import { ReactNode, useMemo, useState } from "react";
+import { ReactNode, useCallback, useMemo, useState } from "react";
 import { Button } from "ui/button";
 import { notImplementedToast } from "ui/shared-toast";
 import { PastesContentCard } from "./pasts-content";
@@ -14,20 +14,19 @@ import { createMCPToolId } from "lib/ai/mcp/mcp-tool-id";
 import { ChatMessageAnnotation } from "app-types/chat";
 import dynamic from "next/dynamic";
 import { ToolChoiceDropDown } from "./tool-choice-dropdown";
-
-import { MCPServerBindingSelector } from "./mcp-server-binding";
-import { MCPServerBinding } from "app-types/mcp";
+import { PROMPT_PASTE_MAX_LENGTH } from "lib/const";
+import { ToolSelector } from "./tool-selector";
 
 interface PromptInputProps {
   placeholder?: string;
   setInput: (value: string) => void;
   input: string;
   onStop: () => void;
-  ownerType?: MCPServerBinding["ownerType"];
-  ownerId: string;
   append: UseChatHelpers["append"];
-  isTemporaryChat?: boolean;
+  toolDisabled?: boolean;
   isLoading?: boolean;
+  model?: string;
+  setModel?: (model: string) => void;
 }
 
 const MentionInput = dynamic(() => import("./mention-input"), {
@@ -40,16 +39,31 @@ const MentionInput = dynamic(() => import("./mention-input"), {
 export default function PromptInput({
   placeholder = "What do you want to know?",
   append,
+  model,
+  setModel,
   input,
   setInput,
   onStop,
   isLoading,
-  isTemporaryChat,
-  ownerType = "thread",
-  ownerId,
+  toolDisabled,
 }: PromptInputProps) {
-  const [appStoreMutate, model, mcpList] = appStore(
-    useShallow((state) => [state.mutate, state.model, state.mcpList]),
+  const [mcpList, globalModel, appStoreMutate] = appStore(
+    useShallow((state) => [state.mcpList, state.model, state.mutate]),
+  );
+
+  const chatModel = useMemo(() => {
+    return model ?? globalModel;
+  }, [model, globalModel]);
+
+  const setChatModel = useCallback(
+    (model: string) => {
+      if (setModel) {
+        setModel(model);
+      } else {
+        appStoreMutate({ model });
+      }
+    },
+    [setModel, appStoreMutate],
   );
 
   const [toolMentionItems, setToolMentionItems] = useState<
@@ -86,13 +100,14 @@ export default function PromptInput({
 
   const handlePaste = (e: React.ClipboardEvent) => {
     const text = e.clipboardData.getData("text/plain");
-    if (text.length > 500) {
+    if (text.length > PROMPT_PASTE_MAX_LENGTH) {
       setPastedContents([...pastedContents, text]);
       e.preventDefault();
     }
   };
 
   const submit = () => {
+    if (isLoading) return;
     const userMessage = input?.trim() || "";
 
     const pastedContentsParsed = pastedContents.map((content) => ({
@@ -174,26 +189,22 @@ export default function PromptInput({
                   <Paperclip className="size-4" />
                 </div>
 
-                <ToolChoiceDropDown />
-                {!isTemporaryChat && (
-                  <MCPServerBindingSelector
-                    ownerId={ownerId}
-                    ownerType={ownerType}
-                    align="start"
-                    side="top"
-                  />
+                {!toolDisabled && (
+                  <>
+                    <ToolChoiceDropDown />
+
+                    <ToolSelector align="start" side="top" />
+                  </>
                 )}
                 <div className="flex-1" />
 
                 <SelectModel
-                  onSelect={(model) => {
-                    appStoreMutate({ model });
-                  }}
+                  onSelect={setChatModel}
                   providers={modelList}
-                  model={model}
+                  model={chatModel}
                 >
                   <Button variant={"ghost"} className="rounded-full">
-                    {model}
+                    {chatModel}
                     <ChevronDown className="size-3" />
                   </Button>
                 </SelectModel>

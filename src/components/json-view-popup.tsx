@@ -1,3 +1,4 @@
+"use client";
 import { useCopy } from "@/hooks/use-copy";
 import { cn, isString } from "lib/utils";
 import { Check, Copy } from "lucide-react";

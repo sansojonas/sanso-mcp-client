@@ -14,11 +14,12 @@ import React, {
 } from "react";
 import { createPortal } from "react-dom";
 import { useLatest } from "@/hooks/use-latest";
-import { cn } from "@/lib/utils";
+import { cn } from "lib/utils";
 import { fuzzySearch } from "@/lib/fuzzy-search";
 import { WrenchIcon } from "lucide-react";
 import { MCPIcon } from "ui/mcp-icon";
 import { extractMCPToolId } from "lib/ai/mcp/mcp-tool-id";
+import { PROMPT_PASTE_MAX_LENGTH } from "lib/const";
 
 type MentionItemType = "tool" | "server" | (string & {});
 
@@ -165,9 +166,12 @@ export default function MentionInput({
         onChange?.(editor.getText());
       },
       editorProps: {
-        handlePaste: (_, e) => {
+        handlePaste: (view, e) => {
           const text = e.clipboardData?.getData("text/plain") ?? "";
-          return text.length > 500;
+          if (text.length > PROMPT_PASTE_MAX_LENGTH) return true;
+          view.dispatch(view.state.tr.insertText(text));
+          e.preventDefault();
+          return true;
         },
         attributes: {
           class:
@@ -225,7 +229,6 @@ export default function MentionInput({
         setSuggestion(null);
       }
     };
-
     window.addEventListener("click", handleClick);
     return () => {
       window.removeEventListener("click", handleClick);

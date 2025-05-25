@@ -27,6 +27,8 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { GithubIcon } from "ui/github-icon";
 import { useShallow } from "zustand/shallow";
+import TemporaryChat from "../temporary-chat";
+import { getShortcutKeyList, Shortcuts } from "lib/keyboard-shortcuts";
 
 function ThreadDropdownComponent() {
   const [threadList, currentThreadId, projectList] = appStore(
@@ -99,7 +101,7 @@ export function AppHeader() {
   }, [theme]);
 
   return (
-    <header className="sticky top-0 z-50 flex items-center px-2 py-1">
+    <header className="sticky top-0 z-50 flex items-center px-2 py-2">
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -108,52 +110,37 @@ export function AppHeader() {
             </Toggle>
           </TooltipTrigger>
           <TooltipContent align="start" side="bottom">
-            <p>Toggle Sidebar</p>
+            <p>
+              Toggle Sidebar
+              <span className="text-xs text-muted-foreground ml-2">
+                {getShortcutKeyList(Shortcuts.toggleSidebar).join(" + ")}
+              </span>
+            </p>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
       {componentByPage}
       <div className="flex-1" />
-      <Link
-        href={
-          currentPaths.startsWith("/temporary-chat") ? "/" : "/temporary-chat"
-        }
-      >
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              size={"sm"}
-              variant={
-                currentPaths.startsWith("/temporary-chat")
-                  ? "secondary"
-                  : "ghost"
-              }
-            >
-              {/* <MessageCircleDashed className="w-4 h-4 fill-foreground" /> */}
-              temporary
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent align="end" side="bottom">
-            <p>Temporary Chat</p>
-          </TooltipContent>
-        </Tooltip>
-      </Link>
-      <Link
-        href="https://github.com/cgoinglove/mcp-client-chatbot"
-        target="_blank"
-      >
-        <Button variant="ghost" size="icon">
-          <GithubIcon className="w-4 h-4 fill-foreground" />
-        </Button>
-      </Link>
 
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-      >
-        {isMounted && icon}
-      </Button>
+      <div className="flex items-center gap-1">
+        <TemporaryChat />
+        <Link
+          href="https://github.com/cgoinglove/mcp-client-chatbot"
+          target="_blank"
+        >
+          <Button variant="ghost" size="icon">
+            <GithubIcon className="w-4 h-4 fill-foreground" />
+          </Button>
+        </Link>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+        >
+          {isMounted && icon}
+        </Button>
+      </div>
     </header>
   );
 }

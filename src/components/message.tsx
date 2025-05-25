@@ -1,10 +1,10 @@
 "use client";
 
 import type { UIMessage } from "ai";
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState } from "react";
 import equal from "fast-deep-equal";
 
-import { cn } from "lib/utils";
+import { cn, truncateString } from "lib/utils";
 import type { UseChatHelpers } from "@ai-sdk/react";
 import { Alert, AlertDescription, AlertTitle } from "ui/alert";
 import {
@@ -14,10 +14,12 @@ import {
   ReasoningPart,
 } from "./message-parts";
 import { Think } from "ui/think";
+import { Terminal, ChevronDown, ChevronUp } from "lucide-react";
+import { Button } from "ui/button";
 
 interface Props {
   message: UIMessage;
-  threadId: string;
+  threadId?: string;
   isLoading: boolean;
   isLastMessage: boolean;
   setMessages: UseChatHelpers["setMessages"];
@@ -26,6 +28,7 @@ interface Props {
   onPoxyToolCall?: (answer: boolean) => void;
   status: UseChatHelpers["status"];
   messageIndex: number;
+  isError?: boolean;
 }
 
 const PurePreviewMessage = ({
@@ -39,9 +42,9 @@ const PurePreviewMessage = ({
   className,
   onPoxyToolCall,
   messageIndex,
+  isError,
 }: Props) => {
   const isUserMessage = useMemo(() => message.role === "user", [message.role]);
-
   return (
     <div className="w-full mx-auto max-w-3xl px-6 group/message">
       <div
@@ -76,7 +79,7 @@ const PurePreviewMessage = ({
                 <ReasoningPart
                   key={key}
                   reasoning={part.reasoning}
-                  isThinking={isLastPart && isLoading && isLastMessage}
+                  isThinking={isLastPart}
                 />
               );
             }
@@ -88,6 +91,7 @@ const PurePreviewMessage = ({
                   status={status}
                   part={part}
                   isLast={isLastPart}
+                  isError={isError}
                   message={message}
                   setMessages={setMessages}
                   reload={reload}
@@ -105,6 +109,7 @@ const PurePreviewMessage = ({
                   message={message}
                   setMessages={setMessages}
                   reload={reload}
+                  isError={isError}
                 />
               );
             }
@@ -114,9 +119,12 @@ const PurePreviewMessage = ({
               return (
                 <ToolMessagePart
                   isLast={isLast}
+                  message={message}
                   onPoxyToolCall={isLast ? onPoxyToolCall : undefined}
                   key={key}
                   part={part}
+                  isError={isError}
+                  setMessages={setMessages}
                 />
               );
             }
@@ -136,8 +144,62 @@ export const PreviewMessage = memo(
     if (prevProps.isLastMessage !== nextProps.isLastMessage) return false;
     if (prevProps.className !== nextProps.className) return false;
     if (prevProps.status !== nextProps.status) return false;
+    if (prevProps.message.annotations !== nextProps.message.annotations)
+      return false;
+    if (prevProps.isError !== nextProps.isError) return false;
     if (prevProps.onPoxyToolCall !== nextProps.onPoxyToolCall) return false;
     if (!equal(prevProps.message.parts, nextProps.message.parts)) return false;
     return true;
   },
 );
+
+export const ErrorMessage = ({
+  error,
+}: {
+  error: Error;
+  message?: UIMessage;
+}) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const maxLength = 200;
+
+  return (
+    <div className="w-full mx-auto max-w-3xl px-6 animate-in fade-in mt-4">
+      <Alert variant="destructive" className="border-destructive">
+        <Terminal className="h-4 w-4" />
+        <AlertTitle className="mb-2">Chat Error</AlertTitle>
+        <AlertDescription className="text-sm">
+          <div className="whitespace-pre-wrap">
+            {isExpanded
+              ? error.message
+              : truncateString(error.message, maxLength)}
+          </div>
+          {error.message.length > maxLength && (
+            <Button
+              onClick={() => setIsExpanded(!isExpanded)}
+              variant={"ghost"}
+              className="ml-auto"
+              size={"sm"}
+            >
+              {isExpanded ? (
+                <>
+                  <ChevronUp className="h-3 w-3" />
+                  Show less
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="h-3 w-3" />
+                  Show more
+                </>
+              )}
+            </Button>
+          )}
+        </AlertDescription>
+        <AlertDescription>
+          <p className="text-sm text-muted-foreground my-2">
+            This message was not saved. Please try the chat again.
+          </p>
+        </AlertDescription>
+      </Alert>
+    </div>
+  );
+};

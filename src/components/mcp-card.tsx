@@ -39,7 +39,7 @@ const ToolsList = memo(({ tools }: { tools: MCPToolInfo[] }) => (
       <ToolDetailPopup key={tool.name} tool={tool}>
         <div className="flex cursor-pointer bg-secondary rounded-md p-2 hover:bg-input transition-colors">
           <div className="flex-1 w-full">
-            <p className="font-medium text-sm mb-1">{tool.name}</p>
+            <p className="font-medium text-sm mb-1 truncate">{tool.name}</p>
             <p className="text-xs text-muted-foreground line-clamp-1">
               {tool.description}
             </p>

@@ -1,8 +1,13 @@
 "use client";
 
 import { appStore } from "@/app/store";
-import { cn } from "lib/utils";
-import { Check, ClipboardCheck, Wrench, Infinity, PenOff } from "lucide-react";
+import {
+  getShortcutKeyList,
+  isShortcutEvent,
+  Shortcuts,
+} from "lib/keyboard-shortcuts";
+import { capitalizeFirstLetter, cn } from "lib/utils";
+import { Check, ClipboardCheck, Infinity, PenOff } from "lucide-react";
 import { useEffect } from "react";
 import { Button } from "ui/button";
 
@@ -26,7 +31,7 @@ export const ToolChoiceDropDown = () => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "p") {
+      if (isShortcutEvent(e, Shortcuts.toolMode)) {
         e.preventDefault();
         e.stopPropagation();
         appStoreMutate(({ toolChoice }) => {
@@ -49,16 +54,13 @@ export const ToolChoiceDropDown = () => {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
-          variant={toolChoice == "none" ? "ghost" : "outline"}
+          variant={"outline"}
           className={cn(
-            toolChoice == "none" ? "text-muted-foreground" : "bg-transparent",
-            "font-semibold mr-1 rounded-full flex items-center gap-2",
+            toolChoice == "none" ? "text-muted-foreground" : "",
+            "font-semibold mr-1 rounded-full flex items-center gap-2 bg-transparent",
           )}
         >
-          <Wrench className="size-3.5" />
-          <span>
-            {toolChoice.charAt(0).toUpperCase() + toolChoice.slice(1)}
-          </span>
+          <span>{capitalizeFirstLetter(toolChoice)}</span>
           <Separator orientation="vertical" className="h-4" />
           <span className="text-xs text-muted-foreground">⌘P</span>
         </Button>
@@ -68,7 +70,7 @@ export const ToolChoiceDropDown = () => {
           Tool Choice
           <DropdownMenuShortcut>
             <span className="text-xs text-muted-foreground bg-muted rounded-md px-2 py-0.5">
-              ⌘P
+              {getShortcutKeyList(Shortcuts.toolMode).join("")}
             </span>
           </DropdownMenuShortcut>
         </DropdownMenuLabel>

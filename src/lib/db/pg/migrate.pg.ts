@@ -1,14 +1,14 @@
-import { config } from "dotenv";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { join } from "path";
 import { Pool } from "pg";
+import "load-env";
 
-config();
+const url = process.env.POSTGRES_URL!;
 
 const runMigrate = async () => {
   const pool = new Pool({
-    connectionString: process.env.POSTGRES_URL!,
+    connectionString: url,
   });
   const pgDb = drizzle(pool);
 

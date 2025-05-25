@@ -1,4 +1,7 @@
 import type { UIMessage, Message } from "ai";
+import { z } from "zod";
+import { AllowedMCPServerZodSchema } from "./mcp";
+import { UserPreferences } from "./user";
 
 export type ChatThread = {
   id: string;
@@ -33,18 +36,48 @@ export type ChatMessage = {
 export type ChatMessageAnnotation = {
   requiredTools?: string[];
   usageTokens?: number;
+  toolChoice?: "auto" | "none" | "manual";
   [key: string]: any;
 };
+
+export enum AppDefaultToolkit {
+  Visualization = "visualization",
+}
+
+export const chatApiSchemaRequestBodySchema = z.object({
+  id: z.string(),
+  projectId: z.string().optional(),
+  message: z.any() as z.ZodType<UIMessage>,
+  model: z.string().min(1).max(2000),
+  toolChoice: z.enum(["auto", "none", "manual"]),
+  allowedMcpServers: z.record(z.string(), AllowedMCPServerZodSchema).optional(),
+  allowedAppDefaultToolkit: z.array(z.string()).optional(),
+});
+
+export type ChatApiSchemaRequestBody = z.infer<
+  typeof chatApiSchemaRequestBodySchema
+>;
 
 export type ToolInvocationUIPart = Extract<
   Exclude<Message["parts"], undefined>[number],
   { type: "tool-invocation" }
 >;
 
-export type ChatService = {
+export type ChatRepository = {
   insertThread(thread: Omit<ChatThread, "createdAt">): Promise<ChatThread>;
 
   selectThread(id: string): Promise<ChatThread | null>;
+
+  deleteChatMessage(id: string): Promise<void>;
+
+  selectThreadDetails(id: string): Promise<
+    | (ChatThread & {
+        instructions: Project["instructions"] | null;
+        messages: ChatMessage[];
+        userPreferences?: UserPreferences;
+      })
+    | null
+  >;
 
   selectMessagesByThreadId(threadId: string): Promise<ChatMessage[]>;
 

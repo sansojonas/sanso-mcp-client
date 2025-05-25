@@ -11,6 +11,13 @@ export const MCPStdioConfigZodSchema = z.object({
   env: z.record(z.string(), z.string()).optional(),
 });
 
+export const AllowedMCPServerZodSchema = z.object({
+  tools: z.array(z.string()),
+  // resources: z.array(z.string()).optional(),
+});
+
+export type AllowedMCPServer = z.infer<typeof AllowedMCPServerZodSchema>;
+
 export type MCPSseConfig = z.infer<typeof MCPSseConfigZodSchema>;
 export type MCPStdioConfig = z.infer<typeof MCPStdioConfigZodSchema>;
 
@@ -33,35 +40,31 @@ export type MCPServerInfo = {
   status: "connected" | "disconnected" | "loading";
   toolInfo: MCPToolInfo[];
 };
-
-export enum MCPServerBindingOwnerType {
-  Project = "project",
-  Thread = "thread",
-}
-
-export type MCPServerBindingConfig = {
-  [mcpId: string]: {
-    serverName: string;
-    allowedTools: string[];
-  };
-};
-
-export type MCPServerBinding = {
-  ownerType: MCPServerBindingOwnerType | (string & {});
-  ownerId: string;
-  config: MCPServerBindingConfig;
-};
-
-export type McpService = {
-  saveMcpServerBinding(entity: MCPServerBinding): Promise<MCPServerBinding>;
-
-  selectMcpServerBinding(
-    ownerId: string,
-    ownerType: MCPServerBinding["ownerType"],
-  ): Promise<MCPServerBinding | null>;
-
-  deleteMcpServerBinding(
-    ownerId: string,
-    ownerType: MCPServerBinding["ownerType"],
+export interface MCPRepository {
+  insertServer(server: {
+    name: string;
+    config: MCPServerConfig;
+    enabled?: boolean;
+  }): Promise<string>;
+  selectServerById(id: string): Promise<{
+    id: string;
+    name: string;
+    config: MCPServerConfig;
+    enabled: boolean;
+  } | null>;
+  selectServerByName(name: string): Promise<{
+    id: string;
+    name: string;
+    config: MCPServerConfig;
+    enabled: boolean;
+  } | null>;
+  selectAllServers(): Promise<
+    { id: string; name: string; config: MCPServerConfig; enabled: boolean }[]
+  >;
+  updateServer(
+    id: string,
+    data: { name?: string; config?: MCPServerConfig; enabled?: boolean },
   ): Promise<void>;
-};
+  deleteServer(id: string): Promise<void>;
+  existsServerWithName(name: string): Promise<boolean>;
+}

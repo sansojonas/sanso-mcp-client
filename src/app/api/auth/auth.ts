@@ -1,8 +1,9 @@
 import { compare } from "bcrypt-ts";
-import { userService } from "lib/db/service";
+import { userRepository } from "lib/db/repository";
 import NextAuth, { type DefaultSession } from "next-auth";
 import type { DefaultJWT } from "next-auth/jwt";
 import Credentials from "next-auth/providers/credentials";
+import { rememberUserAction } from "./actions";
 
 declare module "next-auth" {
   interface Session extends DefaultSession {
@@ -28,6 +29,8 @@ export const {
   signOut,
   auth,
 } = NextAuth({
+  secret: process.env.AUTH_SECRET,
+  trustHost: true,
   pages: {
     signIn: "/login",
     newUser: "/",
@@ -36,13 +39,13 @@ export const {
     Credentials({
       credentials: {},
       async authorize({ email, password }: any) {
-        const user = await userService.selectByEmail(email);
+        const user = await userRepository.selectByEmail(email);
         if (!user) {
-          return null;
+          throw new Error("User not found");
         }
         const passwordsMatch = await compare(password, user.password);
         if (!passwordsMatch) {
-          return null;
+          throw new Error("Invalid credentials");
         }
         return user;
       },
@@ -57,6 +60,8 @@ export const {
     },
     async session({ session, token }) {
       if (session.user) {
+        const user = await rememberUserAction(token.id);
+        if (!user) throw new Error("User not found");
         session.user.id = token.id;
       }
       return session;

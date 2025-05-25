@@ -3,108 +3,98 @@ import {
   createDataStreamResponse,
   smoothStream,
   streamText,
-  tool as createTool,
-  Tool,
   type UIMessage,
-  Message,
   formatDataStreamPart,
+  appendClientMessage,
+  Message,
 } from "ai";
 
-import {
-  generateTitleFromUserMessageAction,
-  rememberMcpBindingAction,
-  rememberProjectInstructionsAction,
-  rememberThreadAction,
-} from "@/app/api/chat/actions";
 import { customModelProvider, isToolCallUnsupportedModel } from "lib/ai/models";
 
-import { mcpClientsManager } from "../mcp/mcp-manager";
+import { mcpClientsManager } from "lib/ai/mcp/mcp-manager";
 
-import { chatService } from "lib/db/service";
+import { chatRepository } from "lib/db/repository";
 import logger from "logger";
-import { SYSTEM_TIME_PROMPT } from "lib/ai/prompts";
-import { ChatMessageAnnotation, ToolInvocationUIPart } from "app-types/chat";
-import { errorToString, generateUUID, objectFlow, toAny } from "lib/utils";
-import { z } from "zod";
+import {
+  buildProjectInstructionsSystemPrompt,
+  buildUserSystemPrompt,
+} from "lib/ai/prompts";
+import {
+  chatApiSchemaRequestBodySchema,
+  ChatMessageAnnotation,
+} from "app-types/chat";
+
 import { errorIf, safe } from "ts-safe";
-import { callMcpToolAction } from "../mcp/actions";
-import { extractMCPToolId } from "lib/ai/mcp/mcp-tool-id";
+
 import { auth } from "../auth/auth";
-import { redirect } from "next/navigation";
-import { defaultTools } from "lib/ai/tools";
-import { MCPServerBindingConfig } from "app-types/mcp";
 
-const { insertMessage, insertThread, upsertMessage } = chatService;
-
-export const maxDuration = 120;
-
-const requestBodySchema = z.object({
-  id: z.string().optional(),
-  messages: z.array(z.any()) as z.ZodType<Message[]>,
-  model: z.string(),
-  projectId: z.string().optional(),
-  action: z.enum(["update-assistant", "temporary-chat", ""]).optional(),
-  toolChoice: z.enum(["auto", "none", "manual"]).optional(),
-});
+import {
+  appendAnnotations,
+  excludeToolExecution,
+  filterToolsByMentions,
+  handleError,
+  manualToolExecuteByLastMessage,
+  mergeSystemPrompt,
+  convertToMessage,
+  extractInProgressToolPart,
+  assignToolResult,
+  isUserMessage,
+  getAllowedDefaultToolkit,
+  filterToolsByAllowedMCPServers,
+} from "./helper";
+import { generateTitleFromUserMessageAction } from "./actions";
 
 export async function POST(request: Request) {
   try {
     const json = await request.json();
-    const {
-      id,
-      messages,
-      model: modelName,
-      action,
-      projectId,
-      toolChoice,
-    } = requestBodySchema.parse(json);
-
-    let thread = id ? await rememberThreadAction(id) : null;
 
     const session = await auth();
 
     if (!session?.user.id) {
-      return redirect("/login");
+      return new Response("Unauthorized", { status: 401 });
     }
 
-    const message = messages.at(-1)!;
+    const {
+      id,
+      message,
+      model: modelName,
+      toolChoice,
+      allowedAppDefaultToolkit,
+      allowedMcpServers,
+      projectId,
+    } = chatApiSchemaRequestBodySchema.parse(json);
 
-    const isNoStore = action == "temporary-chat";
+    const model = customModelProvider.getModel(modelName);
 
-    if (!message) {
-      return new Response("No user message found", { status: 400 });
-    }
+    let thread = await chatRepository.selectThreadDetails(id);
 
-    if (!thread && !isNoStore) {
+    if (!thread) {
       const title = await generateTitleFromUserMessageAction({
         message,
-        model: customModelProvider.getModel(modelName),
+        model,
       });
-
-      thread = await insertThread({
-        title,
-        id: id ?? generateUUID(),
-        userId: session.user.id,
+      const newThread = await chatRepository.insertThread({
+        id,
         projectId: projectId ?? null,
+        title,
+        userId: session.user.id,
       });
+      thread = await chatRepository.selectThreadDetails(newThread.id);
     }
 
-    const mcpBinding = id ? await rememberMcpBindingAction(id, "thread") : null;
+    // if is false, it means the last message is manual tool execution
+    const isLastMessageUserMessage = isUserMessage(message);
 
-    const projectInstructions = projectId
-      ? await rememberProjectInstructionsAction(projectId)
-      : null;
+    const previousMessages = (thread?.messages ?? []).map(convertToMessage);
 
-    const annotations: ChatMessageAnnotation[] =
-      (message.annotations as ChatMessageAnnotation[]) ?? [];
+    if (!thread) {
+      return new Response("Thread not found", { status: 404 });
+    }
+
+    const annotations = (message?.annotations as ChatMessageAnnotation[]) ?? [];
 
     const mcpTools = mcpClientsManager.tools();
 
-    const model = customModelProvider.getModel(modelName);
-    const systemPrompt = mergeSystemPrompt(
-      projectInstructions?.systemPrompt || "- You are a helpful assistant.",
-      SYSTEM_TIME_PROMPT(session),
-    );
     const isToolCallAllowed =
       !isToolCallUnsupportedModel(model) && toolChoice != "none";
 
@@ -115,71 +105,91 @@ export async function POST(request: Request) {
     const tools = safe(mcpTools)
       .map(errorIf(() => !isToolCallAllowed && "Not allowed"))
       .map((tools) => {
+        // filter tools by mentions
         if (requiredToolsAnnotations.length) {
-          return filterToolsByMentions(requiredToolsAnnotations, tools);
+          return filterToolsByMentions(tools, requiredToolsAnnotations);
         }
-        if (isNoStore) {
-          return {};
-        }
-        if (mcpBinding) {
-          return filterToolsByMcpBinding(mcpBinding, tools);
-        }
-        return tools;
+        // filter tools by allowed mcp servers
+        return filterToolsByAllowedMCPServers(tools, allowedMcpServers);
       })
+      // filter tools by tool choice
       .map((tools) => {
         if (toolChoice == "manual") {
-          return disableToolExecution(tools);
+          return excludeToolExecution(tools);
         }
         return tools;
       })
-      .map((tools) => {
-        return { ...defaultTools, ...tools };
-      })
+      // add allowed default toolkit
+      .map((tools) => ({
+        ...getAllowedDefaultToolkit(allowedAppDefaultToolkit),
+        ...tools,
+      }))
       .orElse(undefined);
+
+    const messages: Message[] = isLastMessageUserMessage
+      ? appendClientMessage({
+          messages: previousMessages,
+          message,
+        })
+      : previousMessages;
 
     return createDataStreamResponse({
       execute: async (dataStream) => {
-        const manualToolPart = extractMenualToolInvocationPart(message);
+        const inProgressToolStep = extractInProgressToolPart(
+          messages.slice(-2),
+        );
 
-        if (toolChoice == "manual" && manualToolPart) {
-          const toolResult = await manualToolExecute(manualToolPart);
-          Object.assign(manualToolPart, {
-            state: "result",
-            result: toolResult,
-          });
-
+        if (inProgressToolStep) {
+          const toolResult = await manualToolExecuteByLastMessage(
+            inProgressToolStep,
+            message,
+          );
+          assignToolResult(inProgressToolStep, toolResult);
           dataStream.write(
             formatDataStreamPart("tool_result", {
-              toolCallId: manualToolPart.toolInvocation.toolCallId,
+              toolCallId: inProgressToolStep.toolInvocation.toolCallId,
               result: toolResult,
             }),
           );
         }
 
+        const userPreferences = thread?.userPreferences || undefined;
+
+        const systemPrompt = mergeSystemPrompt(
+          buildUserSystemPrompt(session, userPreferences),
+          buildProjectInstructionsSystemPrompt(thread?.instructions),
+        );
+
+        // Precompute toolChoice to avoid repeated tool calls
+        const computedToolChoice =
+          isToolCallAllowed &&
+          requiredToolsAnnotations.length > 0 &&
+          inProgressToolStep
+            ? "required"
+            : "auto";
+
         const result = streamText({
           model,
           system: systemPrompt,
-          messages: messages.map(excludeContent),
+          messages,
           maxSteps: 10,
+          experimental_continueSteps: true,
           experimental_transform: smoothStream({ chunking: "word" }),
+          maxRetries: 0,
           tools,
-          toolChoice:
-            isToolCallAllowed && requiredToolsAnnotations.length > 0
-              ? "required"
-              : "auto",
+          toolChoice: computedToolChoice,
           onFinish: async ({ response, usage }) => {
-            if (isNoStore) return;
             const appendMessages = appendResponseMessages({
-              messages: [message],
+              messages: messages.slice(-1),
               responseMessages: response.messages,
             });
-            if (action !== "update-assistant" && message.role == "user") {
-              await insertMessage({
+            if (isLastMessageUserMessage) {
+              await chatRepository.insertMessage({
                 threadId: thread!.id,
-                model: null,
-                role: message.role,
-                parts: message.parts!,
-                attachments: [],
+                model: modelName,
+                role: "user",
+                parts: message.parts,
+                attachments: message.experimental_attachments,
                 id: message.id,
                 annotations: appendAnnotations(message.annotations, {
                   usageTokens: usage.promptTokens,
@@ -188,17 +198,22 @@ export async function POST(request: Request) {
             }
             const assistantMessage = appendMessages.at(-1);
             if (assistantMessage) {
-              dataStream.writeMessageAnnotation(usage.completionTokens);
-              await upsertMessage({
+              const annotations = appendAnnotations(
+                assistantMessage.annotations,
+                {
+                  usageTokens: usage.completionTokens,
+                  toolChoice,
+                },
+              );
+              dataStream.writeMessageAnnotation(annotations.at(-1)!);
+              await chatRepository.upsertMessage({
                 model: modelName,
                 threadId: thread!.id,
                 role: assistantMessage.role,
                 id: assistantMessage.id,
                 parts: assistantMessage.parts as UIMessage["parts"],
-                attachments: [],
-                annotations: appendAnnotations(assistantMessage.annotations, {
-                  usageTokens: usage.completionTokens,
-                }),
+                attachments: assistantMessage.experimental_attachments,
+                annotations,
               });
             }
           },
@@ -208,112 +223,10 @@ export async function POST(request: Request) {
           sendReasoning: true,
         });
       },
-      onError: (error: any) => {
-        logger.error(error);
-        return JSON.stringify(error) || "Oops, an error occured!";
-      },
+      onError: handleError,
     });
   } catch (error: any) {
     logger.error(error);
-    return new Response(error.message || "Oops, an error occured!", {
-      status: 500,
-    });
+    return new Response(error.message, { status: 500 });
   }
-}
-
-function filterToolsByMcpBinding(
-  mcpBinding: MCPServerBindingConfig,
-  tools: Record<string, Tool>,
-) {
-  return objectFlow(tools).filter((_tool, key) => {
-    const { serverName, toolName } = extractMCPToolId(key);
-    const binding = mcpBinding[serverName];
-    if (binding?.allowedTools) {
-      return binding.allowedTools.includes(toolName);
-    }
-    return false;
-  });
-}
-
-function filterToolsByMentions(
-  mentions: string[],
-  tools: Record<string, Tool>,
-) {
-  if (mentions.length === 0) {
-    return tools;
-  }
-  return objectFlow(tools).filter((_tool, key) =>
-    mentions.some((mention) => key.startsWith(mention)),
-  );
-}
-
-function disableToolExecution(
-  tool: Record<string, Tool>,
-): Record<string, Tool> {
-  return objectFlow(tool).map((value) => {
-    return createTool({
-      parameters: value.parameters,
-      description: value.description,
-    });
-  });
-}
-
-function appendAnnotations(
-  annotations: any[] = [],
-  annotationsToAppend: ChatMessageAnnotation[] | ChatMessageAnnotation,
-): ChatMessageAnnotation[] {
-  const newAnnotations = Array.isArray(annotationsToAppend)
-    ? annotationsToAppend
-    : [annotationsToAppend];
-  return [...annotations, ...newAnnotations];
-}
-
-function mergeSystemPrompt(...prompts: (string | undefined)[]) {
-  return prompts
-    .map((prompt) => prompt?.trim())
-    .filter(Boolean)
-    .join("\n\n---\n\n");
-}
-
-function manualToolExecute(part: ToolInvocationUIPart) {
-  const {
-    result: clientAnswer,
-    args,
-    toolName,
-  } = part.toolInvocation as Extract<
-    ToolInvocationUIPart["toolInvocation"],
-    {
-      state: "result";
-    }
-  >;
-
-  if (!clientAnswer)
-    return "The user chose not to run the tool. Please suggest an alternative approach, continue the conversation without it, or ask for clarification if needed.";
-
-  const toolId = extractMCPToolId(toolName);
-
-  return safe(() => callMcpToolAction(toolId.serverName, toolId.toolName, args))
-    .ifFail((error) => ({
-      isError: true,
-      statusMessage: `tool call fail: ${toolName}`,
-      error: errorToString(error),
-    }))
-    .unwrap();
-}
-
-function extractMenualToolInvocationPart(
-  message: Message,
-): ToolInvocationUIPart | null {
-  const lastPart = message.parts?.at(-1);
-  if (!lastPart) return null;
-  if (lastPart.type != "tool-invocation") return null;
-  if (typeof toAny(lastPart.toolInvocation)?.result != "boolean") return null;
-  return lastPart!;
-}
-
-function excludeContent(message: Message): Message {
-  return {
-    ...message,
-    content: "",
-  };
 }

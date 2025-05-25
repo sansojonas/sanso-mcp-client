@@ -96,7 +96,7 @@ export function MessageEditor({
             });
 
             setMode("view");
-            reload();
+            reload({});
           }}
         >
           {isSubmitting ? "Saving..." : "Save"}

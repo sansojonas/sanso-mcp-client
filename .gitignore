@@ -50,5 +50,6 @@ next-env.d.ts
 local-data
 
 .cursorrules
-
+.cursor
+*.ignore
 .mcp-config.json

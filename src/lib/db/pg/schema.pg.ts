@@ -1,5 +1,6 @@
 import { ChatMessage, Project } from "app-types/chat";
-import { MCPServerBindingConfig } from "app-types/mcp";
+import { UserPreferences } from "app-types/user";
+import { MCPServerConfig } from "app-types/mcp";
 import { sql } from "drizzle-orm";
 import {
   pgTable,
@@ -7,8 +8,7 @@ import {
   timestamp,
   json,
   uuid,
-  jsonb,
-  primaryKey,
+  boolean,
 } from "drizzle-orm/pg-core";
 
 export const ChatThreadSchema = pgTable("chat_thread", {
@@ -51,41 +51,22 @@ export const UserSchema = pgTable("user", {
   email: text("email").notNull().unique(),
   password: text("password").notNull(),
   image: text("image"),
+  preferences: json("preferences").default({}).$type<UserPreferences>(),
   createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
-export const McpServerBindingSchema = pgTable(
-  "mcp_server_binding",
-  {
-    ownerType: text("owner_type").notNull(),
-    ownerId: uuid("owner_id").notNull(),
-    config: jsonb("config")
-      .$type<MCPServerBindingConfig>()
-      .notNull()
-      .default(sql`'{}'::jsonb`),
-    createdAt: timestamp("created_at")
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
-    updatedAt: timestamp("updated_at")
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
-  },
-  (tbl) => [primaryKey({ columns: [tbl.ownerType, tbl.ownerId] })],
-);
+export const McpServerSchema = pgTable("mcp_server", {
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  name: text("name").notNull(),
+  config: json("config").notNull().$type<MCPServerConfig>(),
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
 
-// export const McpServerSchema = pgTable("mcp_server", {
-//   id: uuid("id").primaryKey().notNull().defaultRandom(),
-//   name: text("name").notNull(),
-//   config: json("config").notNull(),
-//   enabled: boolean("enabled").notNull().default(true),
-//   createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-//   updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-// });
-
+export type McpServerEntity = typeof McpServerSchema.$inferSelect;
 export type ChatThreadEntity = typeof ChatThreadSchema.$inferSelect;
 export type ChatMessageEntity = typeof ChatMessageSchema.$inferSelect;
 export type ProjectEntity = typeof ProjectSchema.$inferSelect;
 export type UserEntity = typeof UserSchema.$inferSelect;
-export type McpServerBindingEntity = typeof McpServerBindingSchema.$inferSelect;
-// export type McpServerEntity = typeof McpServerSchema.$inferSelect;

@@ -2,7 +2,7 @@
 
 import { IS_BROWSER } from "./const";
 
-const PRE_FIX = "MC-APP";
+const PRE_FIX = "MCP-APP";
 
 const get = <T>(
   storage: Storage,

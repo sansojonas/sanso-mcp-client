@@ -42,10 +42,13 @@ export function PastesContentCard({
           </p>
           {!readonly && (
             <Button
-              className="opacity-0 group-hover/pastes-content:opacity-100 transition-all duration-300 z-10 absolute -top-4 -left-4"
-              variant="secondary"
+              className="hover:bg-input! opacity-0 group-hover/pastes-content:opacity-100 transition-all duration-300 z-10 absolute top-0 right-0"
+              variant="ghost"
               size="icon"
-              onClick={deleteContent}
+              onClick={(e) => {
+                e.stopPropagation();
+                deleteContent?.();
+              }}
             >
               <X />
             </Button>

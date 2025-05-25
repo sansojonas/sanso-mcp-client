@@ -14,9 +14,16 @@ import { isMaybeSseConfig, isMaybeStdioConfig } from "./is-mcp-config";
 import logger from "logger";
 import type { ConsolaInstance } from "consola";
 import { colorize } from "consola/utils";
-import { createDebounce, isNull, Locker, toAny } from "lib/utils";
+import {
+  createDebounce,
+  errorToString,
+  isNull,
+  Locker,
+  toAny,
+} from "lib/utils";
 
-import { safe, watchError } from "ts-safe";
+import { safe } from "ts-safe";
+import { IS_MCP_SERVER_SSE_ONLY } from "lib/const";
 
 type ClientOptions = {
   autoDisconnectSeconds?: number;
@@ -85,6 +92,7 @@ export class MCPClient {
     try {
       const startedAt = Date.now();
       this.locker.lock();
+
       const client = new Client({
         name: this.name,
         version: "1.0.0",
@@ -93,9 +101,13 @@ export class MCPClient {
       let transport: Transport;
       // Create appropriate transport based on server config type
       if (isMaybeStdioConfig(this.serverConfig)) {
+        // Skip stdio transport
+        if (IS_MCP_SERVER_SSE_ONLY) {
+          throw new Error("Stdio transport is not supported");
+        }
+
         const config = MCPStdioConfigZodSchema.parse(this.serverConfig);
         transport = new StdioClientTransport({
-          stderr: process.stderr,
           command: config.command,
           args: config.args,
           // Merge process.env with config.env, ensuring PATH is preserved and filtering out undefined values
@@ -123,7 +135,6 @@ export class MCPClient {
       }
 
       await client.connect(transport);
-      client.onerror = this.log.error;
       this.log.info(
         `Connected to MCP server in ${((Date.now() - startedAt) / 1000).toFixed(2)}s`,
       );
@@ -170,14 +181,12 @@ export class MCPClient {
     return this.client;
   }
   async disconnect() {
-    if (this.isConnected) {
-      this.log.info("Disconnecting from MCP server");
-      await this.locker.wait();
-      this.isConnected = false;
-      const client = this.client;
-      this.client = undefined;
-      await client?.close().catch((e) => this.log.error(e));
-    }
+    this.log.info("Disconnecting from MCP server");
+    await this.locker.wait();
+    this.isConnected = false;
+    const client = this.client;
+    this.client = undefined;
+    await client?.close().catch((e) => this.log.error(e));
   }
   async callTool(toolName: string, input?: unknown) {
     return safe(() => this.log.info("tool call", toolName))
@@ -195,7 +204,29 @@ export class MCPClient {
         return v;
       })
       .ifOk(() => this.scheduleAutoDisconnect())
-      .watch(watchError((e) => this.log.error("Tool call failed", toolName, e)))
+      .watch((status) => {
+        if (!status.isOk) {
+          this.log.error("Tool call failed", toolName, status.error);
+        } else if (status.value?.isError) {
+          this.log.error("Tool call failed", toolName, status.value.content);
+        }
+      })
+      .ifFail((error) => {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                error: {
+                  message: errorToString(error),
+                  name: error?.name,
+                },
+              }),
+            },
+          ],
+          isError: true,
+        };
+      })
       .unwrap();
   }
 }

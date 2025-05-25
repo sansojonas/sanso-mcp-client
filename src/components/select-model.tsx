@@ -31,7 +31,7 @@ export const SelectModel = (props: PropsWithChildren<SelectModelProps>) => {
       <PopoverTrigger asChild>{props.children}</PopoverTrigger>
       <PopoverContent className="p-0 w-[280px]" align={props.align || "end"}>
         <Command
-          className="rounded-lg relative shadow-md  h-80"
+          className="rounded-lg relative shadow-md h-80"
           value={props.model}
           onClick={(e) => e.stopPropagation()}
         >
@@ -40,7 +40,13 @@ export const SelectModel = (props: PropsWithChildren<SelectModelProps>) => {
             <CommandEmpty>No results found.</CommandEmpty>
             {props.providers.map((provider, i) => (
               <Fragment key={provider.provider}>
-                <CommandGroup heading={provider.provider} className="pb-4">
+                <CommandGroup
+                  heading={provider.provider}
+                  className="pb-4"
+                  onWheel={(e) => {
+                    e.stopPropagation();
+                  }}
+                >
                   {provider.models.map((model) => (
                     <CommandItem
                       key={model.name}
